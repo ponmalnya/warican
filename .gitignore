@@ -1,0 +1,9 @@
+# 環境ごとの設定
+.env
+
+# Go
+/api/tmp/
+
+# Next.js（web/.gitignore にもあるが、ルートからも効かせる）
+/web/node_modules/
+/web/.next/

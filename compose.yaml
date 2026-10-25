@@ -1,0 +1,57 @@
+name: warican
+
+services:
+  api:
+    build:
+      context: ./api
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    environment:
+      PORT: "8080"
+      # ブラウザから直接叩かれる経路の許可オリジン。web のホスト側ポートと揃える。
+      CORS_ALLOWED_ORIGIN: "http://localhost:${WEB_PORT:-3000}"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./api:/app
+      # モジュールキャッシュとビルドキャッシュ。named volume にして
+      # コンテナを作り直しても go build が毎回フルにならないようにする。
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/home/app/.cache/go-build
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 40s
+
+  web:
+    build:
+      context: ./web
+    environment:
+      # ---- API の URL が 2 本ある理由 ----
+      # API_URL: web コンテナの中（SSR / Server Components）から見た api。
+      #          compose ネットワーク内のサービス名で引く。
+      API_URL: "http://api:8080"
+      # NEXT_PUBLIC_API_URL: ブラウザから見た api。ホスト側に公開したポート。
+      #          NEXT_PUBLIC_ 接頭辞が付いた値はクライアントJSに埋め込まれる。
+      NEXT_PUBLIC_API_URL: "http://localhost:${API_PORT:-8080}"
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./web:/app
+      # ホストの node_modules / .next で bind mount を上書きさせない。
+      # named volume のほうが I/O も速い。
+      - web-node-modules:/app/node_modules
+      - web-next-cache:/app/.next
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  web-node-modules:
+  web-next-cache:
