@@ -3,12 +3,18 @@ tmp_dir = "tmp"
 
 [build]
   cmd = "go build -o ./tmp/server ./cmd/server"
-  bin = "./tmp/server"
+  entrypoint = ["./tmp/server"]
   include_ext = ["go"]
   exclude_dir = ["tmp", "vendor"]
   exclude_regex = ["_test\\.go$"]
   delay = 300
-  stop_on_error = true
+  # ビルド失敗時に旧バイナリを止めない。
+  # true だと、git checkout / ブランチ切り替えで一瞬ファイルが消えた隙に
+  # ビルドが失敗し、サーバーが落ちたまま復帰しなくなる（実際に踏んだ）。
+  # false なら最後に成功したバイナリが生き続ける。
+  # 代償: コンパイルエラー中は古い挙動が返るので、ログか tmp/build-errors.log を見る。
+  stop_on_error = false
+  # 旧プロセスには SIGINT を送る（main.go が graceful shutdown を実装している）
   send_interrupt = true
   kill_delay = "2s"
 
