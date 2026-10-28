@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/ponmalnya/warican/api/internal/settle"
 )
 
 func main() {
@@ -18,6 +20,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthz)
+	mux.HandleFunc("POST /settle", settleHandler)
 
 	addr := ":" + env("PORT", "8080")
 	srv := &http.Server{
@@ -62,6 +65,38 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
 		"service": "warican-api",
+	})
+}
+
+type settleRequest struct {
+	Members  []string         `json:"members"`
+	Payments []settle.Payment `json:"payments"`
+}
+
+type settleResponse struct {
+	Balances  []settle.Balance  `json:"balances"`
+	Transfers []settle.Transfer `json:"transfers"`
+}
+
+// settleHandler は保存せずにその場で精算結果を返す。
+func settleHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
+	var req settleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "JSON が読めません: " + err.Error()})
+		return
+	}
+
+	balances, err := settle.Settle(req.Members, req.Payments)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, settleResponse{
+		Balances:  balances,
+		Transfers: settle.Transfers(balances),
 	})
 }
 
